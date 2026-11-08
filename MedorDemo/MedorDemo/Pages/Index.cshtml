@@ -2,38 +2,142 @@
 @model MedorDemo.Pages.IndexModel
 
 @{
-    ViewData["Title"] = "Products";
+    ViewData["Title"] = "Inventory";
 }
 
 <div class="container">
-    <h1>Products</h1>
+    <h1>Inventory</h1>
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <label for="client-filter" class="form-label">Clients</label>
+            <select id="client-filter" class="form-select" multiple>
+            </select>
+        </div>
 
+        <div class="col-md-4">
+            <label for="product-filter" class="form-label">Products</label>
+            <select id="product-filter" class="form-select" multiple>
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label for="category-filter" class="form-label">Categories</label>
+            <select id="category-filter" class="form-select" multiple>
+            </select>
+        </div>
+    </div>
     <table class="table table-striped">
         <thead>
             <tr>
-                <th scope="col">ID</th>
-                <th scope="col">Name</th>
+                <th scope="col">Client</th>
+                <th scope="col">Category</th>
+                <th scope="col">Product</th>
+                <th scope="col">Quantity</th>
             </tr>
         </thead>
-        <tbody>
-            @if (Model.Products.Count == 0)
-            {
-                <tr>
-                    <td colspan="2" class="text-muted">
-                        No products available.
-                    </td>
-                </tr>
-            }
-            else
-            {
-                @foreach (var product in Model.Products)
-                {
-                    <tr>
-                        <td>@product.Id</td>
-                        <td>@product.Name</td>
-                    </tr>
-                }
-            }
+        <tbody id="inventory-grid">
+            <tr>
+                <td colspan="4" class="text-muted">
+                    Loading inventory...
+                </td>
+            </tr>
         </tbody>
     </table>
 </div>
+
+<script>
+    async function loadInventory() {
+        const grid = document.getElementById("inventory-grid");
+
+        try {
+            const response = await fetch("/api/inventory");
+
+            if (!response.ok) {
+                throw new Error("Unable to load inventory.");
+            }
+
+            const inventory = await response.json();
+
+            if (inventory.length === 0) {
+                grid.innerHTML = `
+                        <tr>
+                            <td colspan="4" class="text-muted">
+                                No inventory available.
+                            </td>
+                        </tr>`;
+
+                return;
+            }
+
+            grid.innerHTML = inventory.map(row => {
+                const categories = row.categories
+                    .map(category => category.name)
+                    .join(", ");
+
+                return `
+                        <tr>
+                            <td>${row.clientName}</td>
+                            <td>${categories}</td>
+                            <td>${row.productName}</td>
+                            <td>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    value="${row.quantity}"
+                                    class="quantity-input"
+                                    data-client-id="${row.clientId}"
+                                    data-product-id="${row.productId}" />
+                            </td>                        
+                        </tr>`;
+            }).join("");
+        }
+        catch {
+            grid.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-danger">
+                            Inventory could not be loaded.
+                        </td>
+                    </tr>`;
+        }
+    }
+
+    let inventory = [];
+    loadInventory();
+
+    document
+        .getElementById("inventory-grid")
+        .addEventListener("change", async event => {
+            if (!event.target.classList.contains("quantity-input")) {
+                return;
+            }
+
+            const input = event.target;
+            const clientId = input.dataset.clientId;
+            const productId = input.dataset.productId;
+            const quantity = Number(input.value);
+
+            if (!Number.isInteger(quantity) || quantity < 0) {
+                input.setCustomValidity("Quantity must be a non-negative whole number.");
+                input.reportValidity();
+                return;
+            }
+
+            input.setCustomValidity("");
+
+            const response = await fetch(
+                `/api/inventory/${clientId}/${productId}`,
+                {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        quantity: quantity
+                    })
+                });
+
+            if (!response.ok) {
+                alert("The quantity could not be saved.");
+            }
+        });
+</script>

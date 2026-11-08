@@ -1,13 +1,26 @@
-using Microsoft.AspNetCore.Mvc;
+using MedorDemo.Data;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
 
-namespace MedorDemo.Pages
+namespace MedorDemo.Pages;
+
+public class IndexModel : PageModel
 {
-    public class IndexModel : PageModel
-    {
-        public void OnGet()
-        {
+    private readonly AppDbContext _dbContext;
 
-        }
+ 
+    public IReadOnlyList<Product> Products { get; private set; } = [];
+
+    public IndexModel(AppDbContext dbContext)
+    {
+        _dbContext = dbContext;
+    }
+
+    public async Task OnGetAsync()
+    {
+        Products = await _dbContext.Products
+            .AsNoTracking()
+            .OrderBy(product => product.Name)
+            .ToListAsync();
     }
 }

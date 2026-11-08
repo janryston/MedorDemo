@@ -67,6 +67,7 @@ public class AppDbContext : DbContext
                     });
                 });
 
+        // unique constraints
         modelBuilder.Entity<Product>()
             .HasIndex(product => product.Name)
             .IsUnique();
@@ -81,11 +82,11 @@ public class AppDbContext : DbContext
 
 
         modelBuilder.Entity<ClientProductStock>()
-    .HasKey(stock => new
-    {
-        stock.ClientId,
-        stock.ProductId
-    });
+            .HasKey(stock => new
+            {
+                stock.ClientId,
+                stock.ProductId
+            });
 
         modelBuilder.Entity<ClientProductStock>()
             .HasOne(stock => stock.Client)

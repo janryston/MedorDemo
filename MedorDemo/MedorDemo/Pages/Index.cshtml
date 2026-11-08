@@ -7,25 +7,40 @@
 
 <div class="container">
     <h1>Inventory</h1>
+
     <div class="row mb-3">
         <div class="col-md-4">
-            <label for="client-filter" class="form-label">Clients</label>
+            <label for="client-filter" class="form-label">
+                Clients
+            </label>
+
             <select id="client-filter" class="form-select" multiple>
             </select>
         </div>
 
         <div class="col-md-4">
-            <label for="product-filter" class="form-label">Products</label>
+            <label for="product-filter" class="form-label">
+                Products
+            </label>
+
             <select id="product-filter" class="form-select" multiple>
             </select>
         </div>
 
         <div class="col-md-4">
-            <label for="category-filter" class="form-label">Categories</label>
+            <label for="category-filter" class="form-label">
+                Categories
+            </label>
+
             <select id="category-filter" class="form-select" multiple>
             </select>
         </div>
     </div>
+
+    <p class="text-muted">
+        Hold Ctrl while clicking to select multiple values in a filter.
+    </p>
+
     <table class="table table-striped">
         <thead>
             <tr>
@@ -35,6 +50,7 @@
                 <th scope="col">Quantity</th>
             </tr>
         </thead>
+
         <tbody id="inventory-grid">
             <tr>
                 <td colspan="4" class="text-muted">
@@ -46,6 +62,146 @@
 </div>
 
 <script>
+    // This variable stores all inventory rows received from the API.
+    let inventory = [];
+
+    // This function protects the page when displaying text received from the API.
+    function escapeHtml(value) {
+        return String(value)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    // This function adds options to one of the filter select elements.
+    function populateSelect(elementId, values) {
+        const select = document.getElementById(elementId);
+
+        select.replaceChildren();
+
+        const allOption = document.createElement("option");
+
+        allOption.value = "";
+        allOption.textContent = "<all>";
+        allOption.selected = true;
+
+        select.appendChild(allOption);
+
+        const sortedValues = [...values.entries()]
+            .sort((first, second) =>
+                first[1].localeCompare(second[1]));
+
+        for (const [value, text] of sortedValues) {
+            const option = document.createElement("option");
+
+            option.value = value;
+            option.textContent = text;
+
+            select.appendChild(option);
+        }
+    }
+
+    // This function fills all three filters using the loaded inventory.
+    function populateFilters() {
+        const clients = new Map();
+        const products = new Map();
+        const categories = new Map();
+
+        for (const row of inventory) {
+            clients.set(row.clientId, row.clientName);
+            products.set(row.productId, row.productName);
+
+            for (const category of row.categories) {
+                categories.set(category.id, category.name);
+            }
+        }
+
+        populateSelect("client-filter", clients);
+        populateSelect("product-filter", products);
+        populateSelect("category-filter", categories);
+    }
+
+    // This function returns the numeric IDs selected in a filter.
+    function getSelectedValues(elementId) {
+        const select = document.getElementById(elementId);
+
+        return new Set(
+            [...select.selectedOptions]
+                .filter(option => option.value !== "")
+                .map(option => Number(option.value))
+        );
+    }
+    // This function displays the inventory rows matching the filters.
+    function renderInventory() {
+        const selectedClients =
+            getSelectedValues("client-filter");
+
+        const selectedProducts =
+            getSelectedValues("product-filter");
+
+        const selectedCategories =
+            getSelectedValues("category-filter");
+
+        const matchingRows = inventory.filter(row => {
+            const clientMatches =
+                selectedClients.size === 0 ||
+                selectedClients.has(row.clientId);
+
+            const productMatches =
+                selectedProducts.size === 0 ||
+                selectedProducts.has(row.productId);
+
+            const categoryMatches =
+                selectedCategories.size === 0 ||
+                row.categories.some(category =>
+                    selectedCategories.has(category.id));
+
+            return clientMatches &&
+                productMatches &&
+                categoryMatches;
+        });
+
+        const grid = document.getElementById("inventory-grid");
+
+        if (matchingRows.length === 0) {
+            grid.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-muted">
+                            No inventory matches the selected filters.
+                        </td>
+                    </tr>`;
+
+            return;
+        }
+
+        grid.innerHTML = matchingRows.map(row => {
+            const categoryNames = row.categories
+                .map(category => escapeHtml(category.name))
+                .join(", ");
+
+            return `
+                    <tr>
+                        <td>${escapeHtml(row.clientName)}</td>
+                        <td>${categoryNames}</td>
+                        <td>${escapeHtml(row.productName)}</td>
+                        <td>
+                            <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value="${row.quantity}"
+                                class="quantity-input"
+                                data-client-id="${row.clientId}"
+                                data-product-id="${row.productId}"
+                                data-original-value="${row.quantity}" />
+                        </td>
+                    </tr>`;
+        }).join("");
+    }
+
+    // This function loads all inventory rows from the REST API.
     async function loadInventory() {
         const grid = document.getElementById("inventory-grid");
 
@@ -53,43 +209,13 @@
             const response = await fetch("/api/inventory");
 
             if (!response.ok) {
-                throw new Error("Unable to load inventory.");
+                throw new Error("Inventory request failed.");
             }
 
-            const inventory = await response.json();
+            inventory = await response.json();
 
-            if (inventory.length === 0) {
-                grid.innerHTML = `
-                        <tr>
-                            <td colspan="4" class="text-muted">
-                                No inventory available.
-                            </td>
-                        </tr>`;
-
-                return;
-            }
-
-            grid.innerHTML = inventory.map(row => {
-                const categories = row.categories
-                    .map(category => category.name)
-                    .join(", ");
-
-                return `
-                        <tr>
-                            <td>${row.clientName}</td>
-                            <td>${categories}</td>
-                            <td>${row.productName}</td>
-                            <td>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value="${row.quantity}"
-                                    class="quantity-input"
-                                    data-client-id="${row.clientId}"
-                                    data-product-id="${row.productId}" />
-                            </td>                        
-                        </tr>`;
-            }).join("");
+            populateFilters();
+            renderInventory();
         }
         catch {
             grid.innerHTML = `
@@ -101,43 +227,74 @@
         }
     }
 
-    let inventory = [];
-    loadInventory();
+    // This function saves a changed quantity.
+    async function saveQuantity(input) {
+        const clientId = input.dataset.clientId;
+        const productId = input.dataset.productId;
+        const quantity = Number(input.value);
+        const originalValue = input.dataset.originalValue;
 
+        if (!Number.isInteger(quantity) || quantity < 0) {
+            alert("Quantity must be a non-negative whole number.");
+            input.value = originalValue;
+            return;
+        }
+
+        const response = await fetch(
+            `/api/inventory/${clientId}/${productId}`,
+            {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    quantity: quantity
+                })
+            });
+
+        if (!response.ok) {
+            alert("The quantity could not be saved.");
+            input.value = originalValue;
+            return;
+        }
+
+        input.dataset.originalValue = quantity;
+
+        const row = inventory.find(item =>
+            item.clientId === Number(clientId) &&
+            item.productId === Number(productId));
+
+        if (row !== undefined) {
+            row.quantity = quantity;
+        }
+    }
+
+    // This catches changes made to any quantity input in the grid.
     document
         .getElementById("inventory-grid")
         .addEventListener("change", async event => {
-            if (!event.target.classList.contains("quantity-input")) {
-                return;
-            }
-
             const input = event.target;
-            const clientId = input.dataset.clientId;
-            const productId = input.dataset.productId;
-            const quantity = Number(input.value);
 
-            if (!Number.isInteger(quantity) || quantity < 0) {
-                input.setCustomValidity("Quantity must be a non-negative whole number.");
-                input.reportValidity();
+            if (!input.classList.contains("quantity-input")) {
                 return;
             }
 
-            input.setCustomValidity("");
-
-            const response = await fetch(
-                `/api/inventory/${clientId}/${productId}`,
-                {
-                    method: "PUT",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        quantity: quantity
-                    })
-                });
-
-            if (!response.ok) {
-                alert("The quantity could not be saved.");
-            }
+            await saveQuantity(input);
         });
+
+    // These handlers re-render the grid whenever a filter changes.
+    document
+        .getElementById("client-filter")
+        .addEventListener("change", renderInventory);
+
+    document
+        .getElementById("product-filter")
+        .addEventListener("change", renderInventory);
+
+    document
+        .getElementById("category-filter")
+        .addEventListener("change", renderInventory);
+
+    // Start loading the data when the page is opened.
+    loadInventory();
 </script>

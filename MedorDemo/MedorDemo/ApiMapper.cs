@@ -4,16 +4,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MedorDemo
 {
-    public class ApiMapper
+    public static class ApiMapper
     {
         public static void MapApi(WebApplication app)
         {
             MapGetClients(app);
-
             MapGetProducts(app);
-
             MapGetInventory(app);
             MapPutInventory(app);
+            //TODO add a POST call to add stock to new products
         }
 
         private static void MapGetProducts(WebApplication app)
@@ -85,6 +84,7 @@ namespace MedorDemo
 
         private static void MapPutInventory(WebApplication app)
         {
+            // TODO consider security - authentication and authorization - for this endpoint. NOT in specs
             app.MapPut(
                 "/api/inventory/{clientId:long}/{productId:long}",
                 async Task<IResult> (
@@ -108,7 +108,8 @@ namespace MedorDemo
 
                 if (stock is null)
                 {
-                return Results.NotFound();
+                    //TODO either add a POST method or insert a new stock here
+                    return Results.NotFound();
                 }
 
                 stock.Quantity = request.Quantity;
